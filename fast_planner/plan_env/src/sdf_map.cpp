@@ -98,8 +98,8 @@ void SDFMap::initMap(ros::NodeHandle& nh) {
   md_.tmp_buffer1_ = vector<double>(buffer_size, 0);
   md_.tmp_buffer2_ = vector<double>(buffer_size, 0);
   md_.raycast_num_ = 0;
-
-  md_.proj_points_.resize(640 * 480 / mp_.skip_pixel_ / mp_.skip_pixel_);
+  md_.proj_points_.resize(256 * 144 / mp_.skip_pixel_ / mp_.skip_pixel_);
+  // md_.proj_points_.resize(256 * 144 / mp_.skip_pixel_ / mp_.skip_pixel_);
   md_.proj_points_cnt = 0;
 
   /* init callback */
@@ -122,10 +122,10 @@ void SDFMap::initMap(ros::NodeHandle& nh) {
     sync_image_odom_->registerCallback(boost::bind(&SDFMap::depthOdomCallback, this, _1, _2));
   }
   
-  indep_cloud_sub_ =
-      node_.subscribe<sensor_msgs::PointCloud2>("/sdf_map/cloud", 10, &SDFMap::cloudCallback, this);
-  indep_odom_sub_ =
-      node_.subscribe<nav_msgs::Odometry>("/sdf_map/odom", 10, &SDFMap::odomCallback, this);
+  // indep_cloud_sub_ =
+  //     node_.subscribe<sensor_msgs::PointCloud2>("/sdf_map/cloud", 10, &SDFMap::cloudCallback, this);
+  // indep_odom_sub_ =
+  //     node_.subscribe<nav_msgs::Odometry>("/sdf_map/odom", 10, &SDFMap::odomCallback, this);
 
   occ_timer_ = node_.createTimer(ros::Duration(0.05), &SDFMap::updateOccupancyCallback, this);
   esdf_timer_ = node_.createTimer(ros::Duration(0.05), &SDFMap::updateESDFCallback, this);
@@ -371,7 +371,6 @@ void SDFMap::projectDepthImage() {
 
         proj_pt = camera_r * proj_pt + md_.camera_pos_;
 
-        if (u == 320 && v == 240) std::cout << "depth: " << depth << std::endl;
         md_.proj_points_[md_.proj_points_cnt++] = proj_pt;
       }
     }
@@ -398,6 +397,7 @@ void SDFMap::projectDepthImage() {
           row_ptr = row_ptr + mp_.skip_pixel_;
 
           // filter depth with low certainty
+          
           if (*row_ptr == 0) {
             depth = mp_.max_ray_length_ + 0.1;
           } else if (depth < mp_.depth_filter_mindist_) {
@@ -415,6 +415,7 @@ void SDFMap::projectDepthImage() {
           // if (!isInMap(pt_world)) {
           //   pt_world = closetPointInMap(pt_world, md_.camera_pos_);
           // }
+
 
           md_.proj_points_[md_.proj_points_cnt++] = pt_world;
 

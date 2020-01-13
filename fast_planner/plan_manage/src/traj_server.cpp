@@ -5,8 +5,9 @@
 #include "std_msgs/Empty.h"
 #include "visualization_msgs/Marker.h"
 #include <ros/ros.h>
+#include <swarmtal_msgs/drone_onboard_command.h>
 
-ros::Publisher state_pub, pos_cmd_pub, traj_pub;
+ros::Publisher state_pub, swarm_pos_cmd_pub, pos_cmd_pub, traj_pub;
 
 nav_msgs::Odometry odom;
 
@@ -171,6 +172,8 @@ void cmdCallback(const ros::TimerEvent& e) {
 
   Eigen::Vector3d pos, vel, acc, pos_forward;
 
+  swarmtal_msgs::drone_onboard_command _cmd;
+
   if (t_cur < traj_duration && t_cur >= 0.0) {
     pos = traj[0].evaluateDeBoor(t_cmd_start + t_cur);
     vel = traj[1].evaluateDeBoor(t_cmd_start + t_cur);
@@ -189,6 +192,7 @@ void cmdCallback(const ros::TimerEvent& e) {
     cout << "[Traj server]: invalid time." << endl;
   }
 
+
   cmd.header.stamp = time_now;
   cmd.header.frame_id = "world";
   cmd.trajectory_flag = quadrotor_msgs::PositionCommand::TRAJECTORY_STATUS_READY;
@@ -206,6 +210,9 @@ void cmdCallback(const ros::TimerEvent& e) {
   cmd.acceleration.y = acc(1);
   cmd.acceleration.z = acc(2);
 
+  
+
+
   Eigen::Vector3d pos_err = pos_forward - pos;
   if (pos_err.norm() > 1e-3) {
     cmd.yaw = atan2(pos_err(1), pos_err(0));
@@ -217,6 +224,22 @@ void cmdCallback(const ros::TimerEvent& e) {
   pos_cmd_pub.publish(cmd);
 
   last_yaw_ = cmd.yaw;
+  
+  _cmd.command_type = 0;
+  _cmd.param1 = pos(0)*10000;
+  _cmd.param2 = pos(1)*10000;
+  _cmd.param3 = pos(2)*10000;
+  _cmd.param4 = cmd.yaw*10000;
+  
+  _cmd.param5 = vel(0)*10000;
+  _cmd.param6 = vel(1)*10000;
+  _cmd.param7 = vel(2)*10000;
+
+  _cmd.param8 = acc(0)*10000;
+  _cmd.param9 = acc(1)*10000;
+  _cmd.param10 = acc(2)*10000;
+
+  swarm_pos_cmd_pub.publish(_cmd);
 
   drawState(pos, vel, 0, Eigen::Vector4d(0, 1, 0, 1));
   drawState(pos, acc, 1, Eigen::Vector4d(0, 0, 1, 1));
@@ -242,6 +265,7 @@ int main(int argc, char** argv) {
   ros::Timer cmd_timer = node.createTimer(ros::Duration(0.01), cmdCallback);
   state_pub = node.advertise<visualization_msgs::Marker>("planning/state", 10);
   pos_cmd_pub = node.advertise<quadrotor_msgs::PositionCommand>("/position_cmd", 50);
+  swarm_pos_cmd_pub = node.advertise<swarmtal_msgs::drone_onboard_command>("/drone_commander/onboard_command", 50);
 
   ros::Timer vis_timer = node.createTimer(ros::Duration(0.25), visCallback);
   traj_pub = node.advertise<visualization_msgs::Marker>("planning/travel_traj", 10);
