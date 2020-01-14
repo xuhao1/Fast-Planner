@@ -229,7 +229,8 @@ void cmdCallback(const ros::TimerEvent& e) {
   _cmd.param1 = pos(0)*10000;
   _cmd.param2 = pos(1)*10000;
   _cmd.param3 = pos(2)*10000;
-  _cmd.param4 = cmd.yaw*10000;
+  //Swarmtal control uses ENU yaw here
+  _cmd.param4 = -cmd.yaw*10000;
   
   _cmd.param5 = vel(0)*10000;
   _cmd.param6 = vel(1)*10000;
