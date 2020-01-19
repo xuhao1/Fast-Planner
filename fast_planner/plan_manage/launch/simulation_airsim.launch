@@ -5,9 +5,18 @@
   <arg name="map_size_y" value="100.0"/>
   <arg name="map_size_z" value=" 10.0"/>
   <arg name="drone_id" default="1"/>
+  <arg name="host" default="172.17.0.1" /> 
 
   <arg name="odom_topic" value="/airsim_node/Drone_$(arg drone_id)/odom_local_ned" />
 
+  <!-- Airsim simulator stuff-->
+  <include file="$(find drone_commander)/launch/airsim.launch">
+    
+    <arg name="host" value="$(arg host)" />
+    <arg name="vo_topic" value="$(arg odom_topic)" />
+
+  </include>
+  
   <!-- main algorithm params -->
   <include file="$(find plan_manage)/launch/kino_algorithm_airsim.xml">
 
