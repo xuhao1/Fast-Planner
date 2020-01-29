@@ -2,29 +2,19 @@
 
   <!-- size of map, change the size in x, y, z according to your application -->
   <arg name="map_size_x" value="100.0"/>
-  <arg name="map_size_y" value="100.0"/>
-  <arg name="map_size_z" value=" 10.0"/>
+  <arg name="map_size_y" value="40.0"/>
+  <arg name="map_size_z" value="15.0"/>
   <arg name="drone_id" default="1"/>
   <arg name="host" default="172.17.0.1" /> 
 
   <arg name="odom_topic" value="/airsim_node/Drone_$(arg drone_id)/odom_local_ned" />
 
   <!-- Airsim simulator stuff-->
-  <include file="$(find drone_commander)/launch/airsim.launch">
-    
+  <include file="$(find airsim_ros_pkgs)/launch/airsim_planner.launch">
     <arg name="host" value="$(arg host)" />
-    <arg name="vo_topic" value="$(arg odom_topic)" />
-
+    <arg name="drone_id" value="$(arg drone_id)" />
   </include>
 
-  <node name="airsim_node" pkg="airsim_ros_pkgs" type="airsim_node" output="screen">
-		<param name="is_vulkan" type="bool" value="false" /> 
-		<param name="update_airsim_img_response_every_n_sec" type="double" value="0.05" /> 
-		<param name="update_airsim_control_every_n_sec" type="double" value="0.02" />
-		<param name="update_imu_n_sec" type="double" value="0.01" />
-		<param name="host_ip" type="string" value="$(arg host)" />
-	</node>
-  
   <!-- main algorithm params -->
   <include file="$(find plan_manage)/launch/kino_algorithm_airsim.xml">
 
