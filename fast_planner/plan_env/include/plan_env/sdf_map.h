@@ -89,14 +89,18 @@ struct MappingData {
   Eigen::Vector3d camera_pos_, last_camera_pos_;
   Eigen::Quaterniond camera_q_, last_camera_q_;
 
+  Eigen::Vector3d camera_pos_s[4], last_camera_pos_s[4];
+  Eigen::Quaterniond camera_q_s[4], last_camera_q_s[4];
   // depth image data
 
-  cv::Mat depth_image_, last_depth_image_;
+  cv::Mat depth_images_[4], last_depth_images_[4];
+  
   int image_cnt_;
 
   // flags of map state
 
   bool occ_need_update_, need_clear_local_map_, esdf_need_update_;
+  bool occ_need_updates[4] = {0};
   bool has_first_depth_;
   bool has_odom_, has_cloud_;
 
@@ -127,6 +131,12 @@ struct MappingData {
 class SDFMap {
 public:
   SDFMap() {
+      // md_.camera_pos_s.resize(4);
+      // md_.last_camera_pos_s.resize(4);
+      // md_.camera_q_s.resize(4);
+      // md_.last_camera_q_s.resize(4);
+      // md_.depth_images_.resize(4);
+      // md_.last_depth_image_.resize(4);
   }
   ~SDFMap() {
   }
@@ -196,7 +206,8 @@ private:
 
   // get depth image and camera pose
   void depthPoseCallback(const sensor_msgs::ImageConstPtr& img,
-                         const geometry_msgs::PoseStampedConstPtr& pose);
+                         const geometry_msgs::PoseStampedConstPtr& pose, int cam_id);
+  
   void depthOdomCallback(const sensor_msgs::ImageConstPtr& img, const nav_msgs::OdometryConstPtr& odom);
   void depthCallback(const sensor_msgs::ImageConstPtr& img);
   void cloudCallback(const sensor_msgs::PointCloud2ConstPtr& img);
@@ -209,7 +220,7 @@ private:
   void visCallback(const ros::TimerEvent& /*event*/);
 
   // main update process
-  void projectDepthImage();
+  void projectDepthImage(int cam_id);
   void raycastProcess();
   void clearAndInflateLocalMap();
 
@@ -230,9 +241,20 @@ private:
 
   ros::NodeHandle node_;
   shared_ptr<message_filters::Subscriber<sensor_msgs::Image>> depth_sub_;
+  shared_ptr<message_filters::Subscriber<sensor_msgs::Image>> depth_sub_1;
+  shared_ptr<message_filters::Subscriber<sensor_msgs::Image>> depth_sub_2;
+  shared_ptr<message_filters::Subscriber<sensor_msgs::Image>> depth_sub_3;
+  
   shared_ptr<message_filters::Subscriber<geometry_msgs::PoseStamped>> pose_sub_;
+  shared_ptr<message_filters::Subscriber<geometry_msgs::PoseStamped>> pose_sub_1;
+  shared_ptr<message_filters::Subscriber<geometry_msgs::PoseStamped>> pose_sub_2;
+  shared_ptr<message_filters::Subscriber<geometry_msgs::PoseStamped>> pose_sub_3;
+  
   shared_ptr<message_filters::Subscriber<nav_msgs::Odometry>> odom_sub_;
   SynchronizerImagePose sync_image_pose_;
+  SynchronizerImagePose sync_image_pose_1;
+  SynchronizerImagePose sync_image_pose_2;
+  SynchronizerImagePose sync_image_pose_3;
   SynchronizerImageOdom sync_image_odom_;
   ros::Subscriber indep_depth_sub_, indep_odom_sub_, indep_pose_sub_, indep_cloud_sub_;
   ros::Publisher map_pub_, esdf_pub_, map_inf_pub_, update_range_pub_;

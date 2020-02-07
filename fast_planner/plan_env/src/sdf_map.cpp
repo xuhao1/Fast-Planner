@@ -1,4 +1,6 @@
 #include "plan_env/sdf_map.h"
+#define BACKWARD_HAS_DW 1
+#include <backward.hpp>
 
 // #define current_img_ md_.depth_image_[image_cnt_ & 1]
 // #define last_img_ md_.depth_image_[!(image_cnt_ & 1)]
@@ -105,14 +107,42 @@ void SDFMap::initMap(ros::NodeHandle& nh) {
   /* init callback */
 
   depth_sub_.reset(new message_filters::Subscriber<sensor_msgs::Image>(node_, "/sdf_map/depth", 50));
+  depth_sub_1.reset(new message_filters::Subscriber<sensor_msgs::Image>(node_, "/sdf_map/depth1", 50));
+  depth_sub_2.reset(new message_filters::Subscriber<sensor_msgs::Image>(node_, "/sdf_map/depth2", 50));
+  depth_sub_3.reset(new message_filters::Subscriber<sensor_msgs::Image>(node_, "/sdf_map/depth3", 50));
 
   if (mp_.pose_type_ == POSE_STAMPED) {
+    //Camera 0
     pose_sub_.reset(
         new message_filters::Subscriber<geometry_msgs::PoseStamped>(node_, "/sdf_map/pose", 25));
 
     sync_image_pose_.reset(new message_filters::Synchronizer<SyncPolicyImagePose>(
         SyncPolicyImagePose(100), *depth_sub_, *pose_sub_));
-    sync_image_pose_->registerCallback(boost::bind(&SDFMap::depthPoseCallback, this, _1, _2));
+    sync_image_pose_->registerCallback(boost::bind(&SDFMap::depthPoseCallback, this, _1, _2, 0));
+
+    //Camera 1
+    pose_sub_1.reset(
+        new message_filters::Subscriber<geometry_msgs::PoseStamped>(node_, "/sdf_map/pose1", 25));
+
+    sync_image_pose_1.reset(new message_filters::Synchronizer<SyncPolicyImagePose>(
+        SyncPolicyImagePose(100), *depth_sub_1, *pose_sub_1));
+    sync_image_pose_1->registerCallback(boost::bind(&SDFMap::depthPoseCallback, this, _1, _2, 1));
+
+    //Camera 2
+    pose_sub_2.reset(
+        new message_filters::Subscriber<geometry_msgs::PoseStamped>(node_, "/sdf_map/pose2", 25));
+
+    sync_image_pose_2.reset(new message_filters::Synchronizer<SyncPolicyImagePose>(
+        SyncPolicyImagePose(100), *depth_sub_2, *pose_sub_2));
+    sync_image_pose_2->registerCallback(boost::bind(&SDFMap::depthPoseCallback, this, _1, _2, 2));
+
+    //Camera 3
+    pose_sub_3.reset(
+        new message_filters::Subscriber<geometry_msgs::PoseStamped>(node_, "/sdf_map/pose3", 25));
+
+    sync_image_pose_3.reset(new message_filters::Synchronizer<SyncPolicyImagePose>(
+        SyncPolicyImagePose(100), *depth_sub_3, *pose_sub_3));
+    sync_image_pose_3->registerCallback(boost::bind(&SDFMap::depthPoseCallback, this, _1, _2, 3));
 
   } else if (mp_.pose_type_ == ODOMETRY) {
     odom_sub_.reset(new message_filters::Subscriber<nav_msgs::Odometry>(node_, "/sdf_map/odom", 100));
@@ -341,25 +371,24 @@ int SDFMap::setCacheOccupancy(Eigen::Vector3d pos, int occ) {
   return idx_ctns;
 }
 
-void SDFMap::projectDepthImage() {
+void SDFMap::projectDepthImage(int cam_id) {
   // md_.proj_points_.clear();
-  md_.proj_points_cnt = 0;
 
   uint16_t* row_ptr;
   // int cols = current_img_.cols, rows = current_img_.rows;
-  int cols = md_.depth_image_.cols;
-  int rows = md_.depth_image_.rows;
+  int cols = md_.depth_images_[cam_id].cols;
+  int rows = md_.depth_images_[cam_id].rows;
 
   double depth;
 
-  Eigen::Matrix3d camera_r = md_.camera_q_.toRotationMatrix();
+  Eigen::Matrix3d camera_r = md_.camera_q_s[cam_id].toRotationMatrix();
 
   // cout << "rotate: " << md_.camera_q_.toRotationMatrix() << endl;
   // std::cout << "pos in proj: " << md_.camera_pos_ << std::endl;
 
   if (!mp_.use_depth_filter_) {
     for (int v = 0; v < rows; v++) {
-      row_ptr = md_.depth_image_.ptr<uint16_t>(v);
+      row_ptr = md_.depth_images_[cam_id].ptr<uint16_t>(v);
 
       for (int u = 0; u < cols; u++) {
 
@@ -369,7 +398,7 @@ void SDFMap::projectDepthImage() {
         proj_pt(1) = (v - mp_.cy_) * depth / mp_.fy_;
         proj_pt(2) = depth;
 
-        proj_pt = camera_r * proj_pt + md_.camera_pos_;
+        proj_pt = camera_r * proj_pt + md_.camera_pos_s[cam_id];
 
         md_.proj_points_[md_.proj_points_cnt++] = proj_pt;
       }
@@ -384,11 +413,11 @@ void SDFMap::projectDepthImage() {
       Eigen::Vector3d pt_cur, pt_world, pt_reproj;
 
       Eigen::Matrix3d last_camera_r_inv;
-      last_camera_r_inv = md_.last_camera_q_.inverse();
+      last_camera_r_inv = md_.last_camera_q_s[cam_id].inverse();
       const double inv_factor = 1.0 / mp_.k_depth_scaling_factor_;
 
       for (int v = mp_.depth_filter_margin_; v < rows - mp_.depth_filter_margin_; v += mp_.skip_pixel_) {
-        row_ptr = md_.depth_image_.ptr<uint16_t>(v) + mp_.depth_filter_margin_;
+        row_ptr = md_.depth_images_[cam_id].ptr<uint16_t>(v) + mp_.depth_filter_margin_;
 
         for (int u = mp_.depth_filter_margin_; u < cols - mp_.depth_filter_margin_;
              u += mp_.skip_pixel_) {
@@ -411,7 +440,7 @@ void SDFMap::projectDepthImage() {
           pt_cur(1) = (v - mp_.cy_) * depth / mp_.fy_;
           pt_cur(2) = depth;
 
-          pt_world = camera_r * pt_cur + md_.camera_pos_;
+          pt_world = camera_r * pt_cur + md_.camera_pos_s[cam_id];
           // if (!isInMap(pt_world)) {
           //   pt_world = closetPointInMap(pt_world, md_.camera_pos_);
           // }
@@ -421,12 +450,12 @@ void SDFMap::projectDepthImage() {
 
           // check consistency with last image, disabled...
           if (false) {
-            pt_reproj = last_camera_r_inv * (pt_world - md_.last_camera_pos_);
+            pt_reproj = last_camera_r_inv * (pt_world - md_.last_camera_pos_s[cam_id]);
             double uu = pt_reproj.x() * mp_.fx_ / pt_reproj.z() + mp_.cx_;
             double vv = pt_reproj.y() * mp_.fy_ / pt_reproj.z() + mp_.cy_;
 
             if (uu >= 0 && uu < cols && vv >= 0 && vv < rows) {
-              if (fabs(md_.last_depth_image_.at<uint16_t>((int)vv, (int)uu) * inv_factor -
+              if (fabs(md_.last_depth_images_[cam_id].at<uint16_t>((int)vv, (int)uu) * inv_factor -
                        pt_reproj.z()) < mp_.depth_filter_tolerance_) {
                 md_.proj_points_[md_.proj_points_cnt++] = pt_world;
               }
@@ -441,9 +470,9 @@ void SDFMap::projectDepthImage() {
 
   /* maintain camera pose for consistency check */
 
-  md_.last_camera_pos_ = md_.camera_pos_;
-  md_.last_camera_q_ = md_.camera_q_;
-  md_.last_depth_image_ = md_.depth_image_;
+  md_.last_camera_pos_s[cam_id] = md_.camera_pos_s[cam_id];
+  md_.last_camera_q_s[cam_id] = md_.camera_q_s[cam_id];
+  md_.last_depth_images_[cam_id] = md_.depth_images_[cam_id];
 }
 
 void SDFMap::raycastProcess() {
@@ -750,7 +779,16 @@ void SDFMap::updateOccupancyCallback(const ros::TimerEvent& /*event*/) {
   ros::Time t1, t2;
   t1 = ros::Time::now();
 
-  projectDepthImage();
+  md_.proj_points_cnt = 0;
+
+  for(int i = 0; i < 4; i++) {
+    if(md_.occ_need_updates[i]) {
+      ROS_INFO("Process camera id %d", i);
+      projectDepthImage(i);
+      md_.occ_need_updates[i] = false;
+    }
+  }
+
   raycastProcess();
 
   if (md_.need_clear_local_map_) {
@@ -793,7 +831,7 @@ void SDFMap::updateESDFCallback(const ros::TimerEvent& /*event*/) {
 }
 
 void SDFMap::depthPoseCallback(const sensor_msgs::ImageConstPtr& img,
-                               const geometry_msgs::PoseStampedConstPtr& pose) {
+                               const geometry_msgs::PoseStampedConstPtr& pose, int cam_id) {
   /* get depth image */
   cv_bridge::CvImagePtr cv_ptr;
   cv_ptr = cv_bridge::toCvCopy(img, img->encoding);
@@ -801,20 +839,32 @@ void SDFMap::depthPoseCallback(const sensor_msgs::ImageConstPtr& img,
   if (img->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
     (cv_ptr->image).convertTo(cv_ptr->image, CV_16UC1, mp_.k_depth_scaling_factor_);
   }
-  cv_ptr->image.copyTo(md_.depth_image_);
+  cv_ptr->image.copyTo(md_.depth_images_[cam_id]);
+  // ROS_INFO("Camera %d received", cam_id);
 
   // std::cout << "depth: " << md_.depth_image_.cols << ", " << md_.depth_image_.rows << std::endl;
+  if (cam_id == 0) {
+    /* get pose */
+    md_.camera_pos_(0) = pose->pose.position.x;
+    md_.camera_pos_(1) = pose->pose.position.y;
+    md_.camera_pos_(2) = pose->pose.position.z;
+    md_.camera_q_ = Eigen::Quaterniond(pose->pose.orientation.w, pose->pose.orientation.x,
+                                      pose->pose.orientation.y, pose->pose.orientation.z);
 
-  /* get pose */
-  md_.camera_pos_(0) = pose->pose.position.x;
-  md_.camera_pos_(1) = pose->pose.position.y;
-  md_.camera_pos_(2) = pose->pose.position.z;
-  md_.camera_q_ = Eigen::Quaterniond(pose->pose.orientation.w, pose->pose.orientation.x,
-                                     pose->pose.orientation.y, pose->pose.orientation.z);
+    md_.has_odom_ = true;
+    md_.update_num_ += 1;
+  }
 
-  md_.has_odom_ = true;
-  md_.update_num_ += 1;
+  md_.occ_need_updates[cam_id] = true;
   md_.occ_need_update_ = true;
+
+  md_.camera_pos_s[cam_id](0) = pose->pose.position.x;
+  md_.camera_pos_s[cam_id](1) = pose->pose.position.y;
+  md_.camera_pos_s[cam_id](2) = pose->pose.position.z;
+  md_.camera_q_s[cam_id] = Eigen::Quaterniond(pose->pose.orientation.w, pose->pose.orientation.x,
+                                    pose->pose.orientation.y, pose->pose.orientation.z);
+
+
 }
 
 void SDFMap::depthOdomCallback(const sensor_msgs::ImageConstPtr& img,
@@ -832,7 +882,7 @@ void SDFMap::depthOdomCallback(const sensor_msgs::ImageConstPtr& img,
   if (img->encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
     (cv_ptr->image).convertTo(cv_ptr->image, CV_16UC1, mp_.k_depth_scaling_factor_);
   }
-  cv_ptr->image.copyTo(md_.depth_image_);
+  cv_ptr->image.copyTo(md_.depth_images_[0]);
 
   md_.occ_need_update_ = true;
 }
