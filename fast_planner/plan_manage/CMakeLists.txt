@@ -58,6 +58,7 @@ add_executable(fast_planner_node
   )
 target_link_libraries(fast_planner_node 
   ${catkin_LIBRARIES}
+  dw
   )
 
 add_executable(traj_server src/traj_server.cpp)

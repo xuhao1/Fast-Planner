@@ -3,6 +3,7 @@
 
 #include <plan_manage/kino_replan_fsm.h>
 
+#define BACKWARD_HAS_DW 1
 #include <plan_manage/backward.hpp>
 namespace backward {
 backward::SignalHandling sh;

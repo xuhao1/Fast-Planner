@@ -102,6 +102,7 @@ struct MappingData {
   bool occ_need_update_, need_clear_local_map_, esdf_need_update_;
   bool occ_need_updates[4] = {0};
   bool has_first_depth_;
+  bool has_first_depths_[4] = {0};
   bool has_odom_, has_cloud_;
 
   // depth image projected point cloud
